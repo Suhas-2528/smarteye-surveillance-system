@@ -1,0 +1,5 @@
+{
+  "name": "SmartEye - AI Camera & Surveillance System",
+  "description": "A comprehensive campus surveillance and AI camera monitoring system featuring dual admin and faculty portals, live RTSP classroom feeds, timestamped image capture, and real-time operator chat.",
+  "requestFramePermissions": ["camera", "geolocation"]
+}

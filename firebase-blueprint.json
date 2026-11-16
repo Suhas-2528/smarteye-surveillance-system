@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "description": "Email address" },
+        "role": { "type": "string", "enum": ["Patient", "Doctor", "Admin"], "description": "User role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "UserPublic": {
+      "title": "UserPublic",
+      "description": "Public user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["uid", "name", "role"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Patient clinical record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Patient ID" },
+        "name": { "type": "string", "description": "Full name" },
+        "gender": { "type": "string", "enum": ["Male", "Female", "Other"] },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["Stable", "Critical", "Recovering"] },
+        "medicalInfo": { "type": "string" },
+        "doctorUid": { "type": "string", "description": "UID of the managing doctor" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "doctorUid"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string", "description": "Optional for global chat, required for direct messages" },
+        "text": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileType": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderName", "text", "timestamp"]
+    },
+    "Medication": {
+      "title": "Medication",
+      "description": "Medication reminder",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "dosage": { "type": "string" },
+        "time": { "type": "string" },
+        "taken": { "type": "boolean" },
+        "category": { "type": "string", "enum": ["Tablet", "Capsule", "Syrup", "Injection"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uid", "name", "dosage", "time", "taken", "category"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users_public/{uid}": {
+      "schema": "UserPublic",
+      "description": "Public user profiles"
+    },
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Patient records"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages"
+    },
+    "/medications/{medId}": {
+      "schema": "Medication",
+      "description": "Medication reminders"
+    }
+  }
+}

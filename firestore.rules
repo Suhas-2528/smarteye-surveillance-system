@@ -1,0 +1,147 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - email: string (required)
+    //   - role: string (required, enum: Patient, Doctor, Admin)
+    //   - createdAt: timestamp
+    //
+    // Collection: users_public
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - role: string (required)
+    //
+    // Collection: messages
+    // Document ID: {messageId}
+    // Fields:
+    //   - senderId: string (required)
+    //   - senderName: string (required)
+    //   - receiverId: string
+    //   - text: string (required)
+    //   - fileUrl: string
+    //   - fileType: string
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: patients
+    // Document ID: {patientId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - gender: string
+    //   - email: string
+    //   - phone: string
+    //   - status: string
+    //   - medicalInfo: string
+    //   - doctorUid: string (required)
+    //   - createdAt: timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDoctor() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Doctor';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin' ||
+         (request.auth.token.email == "e.jayant007@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+             data.uid is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.role in ['Patient', 'Doctor', 'Admin'];
+    }
+
+    function isValidPatient(data) {
+      return data.keys().hasAll(['id', 'name', 'doctorUid']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.doctorUid == request.auth.uid;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'senderName', 'text', 'timestamp']) &&
+             data.senderId == request.auth.uid &&
+             data.senderName is string && data.senderName.size() > 0 && data.senderName.size() < 100 &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 5000 &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidMedication(data) {
+      return data.keys().hasAll(['id', 'uid', 'name', 'dosage', 'time', 'taken', 'category']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.dosage is string && data.dosage.size() > 0 && data.dosage.size() < 50 &&
+             data.time is string &&
+             data.taken is bool &&
+             data.category in ['Tablet', 'Capsule', 'Syrup', 'Injection'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(uid) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role != 'Admin' || isAdmin());
+      allow update: if isOwner(uid) && isValidUser(request.resource.data) && 
+                      request.resource.data.role == resource.data.role;
+    }
+
+    match /users_public/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid);
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && 
+                    (!('receiverId' in resource.data) || 
+                     resource.data.receiverId == request.auth.uid || 
+                     resource.data.senderId == request.auth.uid ||
+                     isAdmin());
+      allow create: if isAuthenticated() && isValidMessage(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.senderId == request.auth.uid);
+    }
+
+    match /medications/{medId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidMedication(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid && isValidMedication(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    match /patients/{patientId} {
+      allow read: if isAuthenticated() && (resource.data.doctorUid == request.auth.uid || isAdmin());
+      allow create: if isDoctor() && isValidPatient(request.resource.data);
+      allow update: if isDoctor() && resource.data.doctorUid == request.auth.uid && isValidPatient(request.resource.data);
+      allow delete: if isDoctor() && resource.data.doctorUid == request.auth.uid;
+    }
+  }
+}
