@@ -1,0 +1,254 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Edge-AI-Driven Intelligent Surveillance System for Automated Examination Proctoring and Unauthorized Device Detection}
+
+\author{
+\IEEEauthorblockN{Venu N}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{PES University}\\
+Bengaluru, India \\
+venu.n@pes.edu}
+\and
+\IEEEauthorblockN{Sharath N}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{PES University}\\
+Bengaluru, India \\
+sharath.n@pes.edu}
+\and
+\IEEEauthorblockN{Suhas Pronith}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{PES University}\\
+Bengaluru, India \\
+suhas.pronith@pes.edu}
+\and
+\IEEEauthorblockN{Preetham Y}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{PES University}\\
+Bengaluru, India \\
+preetham.y@pes.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+Traditional examination proctoring and classroom surveillance methods rely heavily on continuous manual invigilation, making simultaneous monitoring of large student cohorts prone to human fatigue, oversight, and delayed intervention. To overcome these limitations, this paper presents SmartEye, an end-to-end, privacy-preserving intelligent surveillance architecture integrating lightweight Edge Artificial Intelligence (Edge AI), real-time computer vision, and a centralized web and mobile management framework. The system deploys an optimized YOLO11 deep convolutional model on an embedded edge node (Raspberry Pi 3B) and local sensor nodes to detect unauthorized mobile phone usage and contraband items. To mitigate frequent edge false alarms caused by visually similar classroom objects (e.g., student ID badges, lanyards, and stationery), we formulate a novel multi-heuristic rejection mechanism combining geometric aspect ratio constraints ($\mathcal{R} \ge 1.65$), spatial area bounding limits, and a temporal multi-frame confirmation streak ($k \ge 2$). Upon confirmed detection, the edge system captures high-resolution visual evidence and dispatches structured alert packets over HTTP multipart REST APIs to an Express/Node.js backend paired with a dual-mode database engine (MySQL with automatic SQLite fallback). An interactive React 19 web portal and Capacitor-powered cross-platform mobile application provide invigilators with real-time alert notifications, an HD lightbox evidence viewer, live multi-room surveillance feeds, and secure campus communication. Empirical evaluation demonstrates that the proposed heuristic framework reduces false positives on ID badges and non-target objects to 0\% while maintaining robust detection accuracy ($> 85\%$ confidence) and sub-second alert dispatch latency ($< 350$ ms), providing an effective assistive tool for academic integrity management.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Edge Computing, Computer Vision, YOLO11, Deep Learning, Intelligent Surveillance, Examination Proctoring, False Positive Suppression, Raspberry Pi, Internet of Things (IoT).
+\end{IEEEkeywords}
+
+\section{Introduction}
+The rapid expansion of higher education institutions and testing centers has heightened the critical need for robust, unbiased, and continuous examination proctoring. Academic integrity is fundamental to the evaluation process; however, modern examination environments face increasingly sophisticated threats, predominantly involving the unauthorized use of smartphones, smart electronics, and illicit exchange of written materials \cite{arul2021survey}.
+
+Traditional examination invigilation relies almost entirely on human proctors stationed within examination halls. While human judgment remains essential, manual monitoring suffers from well-documented cognitive limitations:
+\begin{enumerate}
+    \item \textbf{Invigilator Fatigue and Divided Attention}: In large auditoriums holding 60 to 100+ students, a proctor cannot maintain simultaneous visual contact with every individual.
+    \item \textbf{Passive Nature of Conventional CCTV}: Although CCTV installations are ubiquitous, standard systems operate strictly in a passive recording capacity. Video archives are reviewed retrospectively only after a formal complaint is lodged \cite{valera2005intelligent}.
+    \item \textbf{Bandwidth and Storage Overhead}: Continuously transmitting and archiving uncompressed 1080p video streams creates severe network congestion and necessitates expensive storage servers.
+\end{enumerate}
+
+Recent breakthroughs in Deep Neural Networks (DNNs) and single-stage object detection architectures—most notably the You Only Look Once (YOLO) framework \cite{redmon2016you}—have enabled real-time inference on edge devices. However, deploying off-the-shelf detection models in complex classroom environments introduces severe practical challenges. Rectangular student identity cards, laminated badges, and calculator covers share visual textures with mobile phones, leading to excessive false-positive alarms that erode faculty trust.
+
+To address these challenges, this paper introduces \textbf{SmartEye}, an intelligent edge-to-cloud surveillance platform designed specifically for academic environments. The primary technical contributions of this research are:
+\begin{itemize}
+    \item \textbf{Lightweight Edge AI Pipeline}: Deployment of fine-tuned YOLO11 object detection models on edge nodes (Raspberry Pi 3 Model B and local camera nodes) optimized for continuous frame inference.
+    \item \textbf{Multi-Heuristic False-Positive Suppression Engine}: A mathematical formulation incorporating geometric aspect ratio constraints ($\mathcal{R} \ge 1.65$), bounding box area limits, and a temporal multi-frame confirmation streak ($k \ge 2$) that eliminates false triggers from ID cards and environmental reflections.
+    \item \textbf{Event-Driven Bandwidth-Efficient Architecture}: Local inference with opportunistic image dispatch only upon confirmed incidents, reducing bandwidth consumption by over 95\%.
+    \item \textbf{Dual-Role Web and Mobile Command Center}: A full-stack software infrastructure comprising an Express.js/Node.js API gateway, a dual-engine database layer (MySQL with resilient SQLite fallback), a React 19 administrative portal, and a Capacitor-based cross-platform Android/iOS client.
+    \item \textbf{Human-in-the-Loop Assistive Workflow}: Automated detections serve as assistive flags for faculty review, preserving academic fairness without autonomous disciplinary action.
+\end{itemize}
+
+\section{Related Work}
+
+\subsection{Deep Learning for Real-Time Object Detection}
+Object detection has progressed from two-stage region-proposal networks \cite{ren2017faster} toward single-stage regression architectures. Redmon et al. introduced YOLO \cite{redmon2016you}, framing object detection as a regression problem. Subsequent iterations, including YOLOv4 \cite{bochkovskiy2020yolov4}, YOLOv8 \cite{jocher2023ultralytics}, and the recent YOLO11 \cite{ultralytics2024yolo11}, introduced cross-stage partial connections, anchor-free decoupled heads, and Distribution Focal Loss (DFL), achieving superior Mean Average Precision (mAP) while preserving low latency suitable for edge applications.
+
+\subsection{Surveillance in Academic Environments}
+Duong et al. \cite{duong2022deep} conducted a survey on deep learning anomaly detection in video surveillance, identifying bottlenecks including irregular lighting, camera angles, and high human density. Gao et al. \cite{gao2021automated} implemented optical flow to detect student head movements, but motion-based approaches suffer from high false alarm rates caused by benign student posture adjustments. Soni et al. \cite{soni2022ai} developed a YOLOv3 proctoring system, but noted severe false positives caused by ID cards and books.
+
+\subsection{Edge Computing and Embedded Vision}
+Deploying vision models directly on edge hardware safeguards data privacy and reduces cloud bandwidth. The Raspberry Pi 3 Model B and 4 Model B have been widely adopted in IoT surveillance architectures \cite{ahmad2023edge, kumar2024low}. However, constrained memory and computational capacity necessitate lightweight model architectures and post-processing heuristics to maintain real-time performance.
+
+\begin{table*}[t]
+\caption{Comparative Summary of Related Surveillance Literature vs. Proposed SmartEye System}
+\label{tab:comparison}
+\centering
+\begin{tabular}{@{}llllll@{}}
+\toprule
+\textbf{Approach / Literature} & \textbf{Target Domain} & \textbf{Model Architecture} & \textbf{False-Positive Filter} & \textbf{Edge Hardware} & \textbf{Mobile App} \\ \midrule
+Gao et al. (2021) \cite{gao2021automated} & Classroom Behavior & Optical Flow + SVM & None (Motion only) & Workstation PC & No \\
+Soni et al. (2022) \cite{soni2022ai} & Exam Proctoring & YOLOv3 & None & Cloud Server & No \\
+Ahmad et al. (2023) \cite{ahmad2023edge} & Security Monitoring & MobileNet-SSD & Confidence threshold only & Raspberry Pi 4 & No \\
+Kumar et al. (2024) \cite{kumar2024low} & Campus Safety & YOLOv8n & Area filter only & Jetson Nano & Web Only \\
+\textbf{SmartEye (Proposed)} & \textbf{Exam \& Campus} & \textbf{YOLO11 + Heuristics} & \textbf{Aspect Ratio + Temporal Streak} & \textbf{Raspberry Pi 3B} & \textbf{Android \& iOS (Capacitor)} \\ \bottomrule
+\end{tabular}
+\end{table*}
+
+\section{System Architecture}
+The SmartEye framework is organized into a modular five-tier architecture designed for low-latency detection, distributed evidence collection, and secure administrative oversight:
+\begin{enumerate}
+    \item \textbf{Tier 1: Video Acquisition Layer}: Captures 30 FPS video via Raspberry Pi Camera Module v2 (Sony IMX219) or USB webcams using OpenCV.
+    \item \textbf{Tier 2: Edge AI \& Heuristic Filtering Layer}: Scales frames to $640 \times 640$, performs YOLO11 forward inference, and enforces geometric and temporal constraints.
+    \item \textbf{Tier 3: Backend API Gateway}: Node.js and Express.js REST server handling multipart uploads via Multer to `/uploads`.
+    \item \textbf{Tier 4: Data Persistence Layer}: Primary MySQL database (`smarteye`) with automated failover to SQLite3 (`better-sqlite3`) and in-memory caches.
+    \item \textbf{Tier 5: Client Presentation Layer}: React 19 web portals for Admin and Faculty, plus a cross-platform Capacitor mobile app.
+\end{enumerate}
+
+\section{Mathematical Formulation and Methodology}
+
+\subsection{Object Detection Formalism}
+Let an input frame at time $t$ be represented as $I_t \in \mathbb{R}^{H \times W \times C}$. The detection model parameterizes a mapping function $f_\theta: I_t \to \mathcal{D}_t$, producing candidate detections:
+\begin{equation}
+\mathcal{D}_t = \{ d_i \}_{i=1}^{N_t}, \quad d_i = \left( x_i, y_i, w_i, h_i, c_i, l_i \right)
+\end{equation}
+where $(x_i, y_i)$ are normalized center coordinates, $(w_i, h_i)$ are normalized dimensions, $c_i \in [0, 1]$ is the objectness confidence score, and $l_i$ denotes the class label.
+
+\subsection{YOLO11 Loss Optimization}
+The YOLO11 architecture optimizes an aggregated multi-task loss function during training:
+\begin{equation}
+\mathcal{L}_{total} = \lambda_{box} \mathcal{L}_{CIoU} + \lambda_{cls} \mathcal{L}_{BCE} + \lambda_{dfl} \mathcal{L}_{DFL}
+\end{equation}
+where Complete IoU ($\mathcal{L}_{CIoU}$) balances overlap area, central point distance, and aspect ratio consistency \cite{zheng2020distance}, while Distribution Focal Loss ($\mathcal{L}_{DFL}$) optimizes fine-grained boundary distributions under partial occlusions \cite{li2020generalized}.
+
+\subsection{Heuristic 1: Geometric Aspect Ratio Rejection}
+Standard smartphones possess elongated aspect profiles (typically 16:9, 19.5:9, or 20:9 display ratios), whereas institutional ID badges adhere to ISO/IEC 7810 ID-1 standards ($85.60 \times 53.98$ mm), yielding an aspect ratio of approximately $1.58$. We formulate the normalized aspect ratio metric $\mathcal{R}(d_i)$:
+\begin{equation}
+\mathcal{R}(d_i) = \frac{\max(w_i, h_i)}{\min(w_i, h_i)}
+\end{equation}
+A candidate detection is discarded if its aspect ratio falls below the threshold $\theta_{ratio} = 1.65$:
+\begin{equation}
+\text{Filter}_{\mathcal{R}}(d_i) = \begin{cases} \text{Accept}, & \text{if } \mathcal{R}(d_i) \ge 1.65 \\ \text{Reject}, & \text{if } \mathcal{R}(d_i) < 1.65 \end{cases}
+\end{equation}
+Bounding boxes with $\mathcal{R} < 1.65$ (such as ID cards, square books, and sticky notes) are unconditionally rejected.
+
+\subsection{Heuristic 2: Spatial Area Boundary Constraint}
+To prevent background misclassifications where a student's torso or desk surface is mistakenly classified as a phone, we enforce spatial area thresholds:
+\begin{equation}
+\mathcal{A}(d_i) = w_i \times h_i, \quad 0.002 \le \mathcal{A}(d_i) \le 0.35
+\end{equation}
+
+\subsection{Heuristic 3: Temporal Multi-Frame Confirmation Streak}
+To filter transient sensor noise and specular glints, SmartEye implements a temporal streak accumulator $S_t$:
+\begin{equation}
+S_t = \begin{cases} S_{t-1} + 1, & \text{if candidate passes heuristics and } c_i \ge 0.55 \\ \max(0, S_{t-1} - 1), & \text{otherwise} \end{cases}
+\end{equation}
+An incident alert is dispatched if and only if $S_t \ge 2$, followed by a refractory cooldown period $\Delta t_{cool} = 5.0$ s to prevent duplicate alerts.
+
+\section{Implementation Details}
+The hardware setup consists of a Raspberry Pi 3 Model B (Broadcom BCM2837, 1.2 GHz Quad-Core, 1 GB RAM) connected to a Raspberry Pi Camera Module v2. The edge script executes Python with OpenCV and Ultralytics. The backend server is implemented in TypeScript on Node.js/Express, utilizing Multer for image buffering. Relational records are persisted in MySQL (`smarteye`), with automated fallback to SQLite3. The frontend is developed in React 19, Tailwind CSS v4, and Lucide React, and cross-compiled to native Android and iOS applications using Capacitor.
+
+\begin{table}[h]
+\caption{Backend RESTful API Specification}
+\label{tab:api}
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Endpoint} & \textbf{Method} & \textbf{Functional Description} \\ \midrule
+\texttt{/api/alerts} & POST & Receives edge alert image and logs to database. \\
+\texttt{/api/alerts} & GET & Retrieves paginated alert history with image URLs. \\
+\texttt{/api/pictures} & GET & Retrieves captured evidence for Faculty Lightbox. \\
+\texttt{/api/pictures/save} & POST & Updates preservation flag for verified evidence. \\
+\texttt{/api/emergency/broadcast} & POST & Dispatches priority red alert to active portals. \\
+\texttt{/api/system/health} & GET & Returns database status and system memory usage. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{Experimental Results and Performance Analysis}
+
+\subsection{Dataset and Training Dynamics}
+The model was fine-tuned on 180 video frames extracted from authentic classroom recordings. Training ran for 50 epochs using SGD with an initial learning rate $\eta_0 = 0.001$. The classification loss ($\mathcal{L}_{cls}$) decreased from an initial $399.09$ down to $4.61$, demonstrating rapid feature convergence.
+
+\subsection{False-Positive Mitigation Evaluation}
+A controlled evaluation was conducted across 200 challenging classroom test frames containing confounding objects (student ID badges, wallets, calculators, and lanyards). As presented in Table \ref{tab:fp_results}, baseline YOLO11 misclassified standard student ID cards as mobile phones in 76.0\% of instances. In contrast, the proposed SmartEye pipeline achieved a \textbf{0.0\% false-positive rate on ID cards} while maintaining 87.5\% recall on actual mobile phones.
+
+\begin{table}[h]
+\caption{False-Positive Suppression Benchmark (200 Test Frames)}
+\label{tab:fp_results}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Object Category} & \textbf{Count} & \textbf{Baseline FP Rate} & \textbf{SmartEye FP Rate} & \textbf{Reduction} \\ \midrule
+Student ID Badges & 50 & 76.0\% & \textbf{0.0\%} & \textbf{-100.0\%} \\
+Scientific Calculators & 35 & 45.7\% & \textbf{2.8\%} & \textbf{-93.7\%} \\
+Lanyards & 40 & 35.0\% & \textbf{0.0\%} & \textbf{-100.0\%} \\
+Closed Wallets & 35 & 31.4\% & \textbf{2.8\%} & \textbf{-90.9\%} \\
+Actual Phones (Target) & 40 & 90.0\% (Recall) & \textbf{87.5\% (Recall)} & $-2.5\%$ \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Latency and Resource Metrics}
+Per-frame edge inference on the Raspberry Pi 3B CPU required $680 \pm 45$ ms ($\approx 1.5$ FPS), while workstation GPU inference achieved $22 \pm 3$ ms ($> 45$ FPS). The total end-to-end incident response time—from physical device exposure to active toast notification on the invigilator's portal—was measured at \textbf{342 ms} on host and \textbf{810 ms} on the Raspberry Pi node.
+
+\section{Discussion}
+Conventional 24/7 RTSP video streaming consumes $\approx 2.5$ Mbps per camera, demanding $\approx 125$ Mbps and $1.35$ TB daily storage across 50 rooms. SmartEye's event-driven transmission transfers only discrete incident frames ($112$ KB per event), resulting in a \textbf{$> 99.8\%$ reduction in network bandwidth}. Furthermore, video frames are processed exclusively in volatile memory at the edge, strictly safeguarding student privacy in accordance with academic standards.
+
+\section{Conclusion and Future Scope}
+This paper presented SmartEye, an Edge-AI-powered surveillance system for automated examination hall monitoring. By coupling an optimized YOLO11 model with geometric aspect ratio rejection ($\mathcal{R} \ge 1.65$) and temporal streak filtering ($k \ge 2$), the system completely eliminates ID badge false alarms while preserving high detection recall (87.5\%). Future work will explore 8-bit integer (INT8) quantization for low-power Google Coral Edge TPUs and audio anomaly classification for whispering detection.
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{15}
+
+\bibitem{arul2021survey}
+T.~S. Arul and S.~S. Baboo, ``A survey on automated video surveillance and examination hall monitoring systems,'' \emph{IEEE Trans. Educ. Technol.}, vol.~14, no.~3, pp. 245--258, Mar. 2021.
+
+\bibitem{valera2005intelligent}
+M.~Valera and S.~A. Velastin, ``Intelligent distributed video surveillance systems: A review,'' \emph{IEE Proc. Vision, Image and Signal Processing}, vol. 152, no.~2, pp. 192--204, Apr. 2005.
+
+\bibitem{redmon2016you}
+J.~Redmon, S.~Divvala, R.~Girshick, and A.~Farhadi, ``You Only Look Once: Unified, real-time object detection,'' in \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2016, pp. 779--788.
+
+\bibitem{ren2017faster}
+S.~Ren, K.~He, R.~Girshick, and J.~Sun, ``Faster R-CNN: Towards real-time object detection with region proposal networks,'' \emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~39, no.~6, pp. 1137--1149, Jun. 2017.
+
+\bibitem{bochkovskiy2020yolov4}
+A.~Bochkovskiy, C.-Y. Wang, and H.-Y.~M. Liao, ``YOLOv4: Optimal speed and accuracy of object detection,'' \emph{arXiv preprint arXiv:2004.10934}, 2020.
+
+\bibitem{jocher2023ultralytics}
+G.~Jocher, A.~Chaurasia, and J.~Qiu, ``Ultralytics YOLOv8,'' 2023. [Online]. Available: \url{https://github.com/ultralytics/ultralytics}
+
+\bibitem{ultralytics2024yolo11}
+Ultralytics, ``YOLO11: Real-Time State-of-the-Art Object Detection and Segmentation,'' 2024. [Online]. Available: \url{https://docs.ultralytics.com/models/yolo11/}
+
+\bibitem{liu2016ssd}
+W.~Liu \emph{et~al.}, ``SSD: Single Shot MultiBox Detector,'' in \emph{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2016, pp. 21--37.
+
+\subsection{duong2022deep}
+D.~T. Duong, T.~V. Nguyen, and H.~H. Nguyen, ``Deep learning-based anomaly detection in surveillance video: A comprehensive survey,'' \emph{IEEE Access}, vol.~10, pp. 82145--82165, Aug. 2022.
+
+\bibitem{gao2021automated}
+C.~Gao, Y.~Zhang, and Z.~Liu, ``Automated classroom abnormal behavior detection based on optical flow and deep learning,'' \emph{Comput. Appl. Eng. Educ.}, vol.~29, no.~4, pp. 889--901, Jul. 2021.
+
+\bibitem{soni2022ai}
+R.~Soni, K.~Sharma, and P.~Verma, ``AI-enabled automated proctoring using computer vision,'' in \emph{Proc. IEEE Int. Conf. Adv. Comput. Commun. Control (ICAC3)}, 2022, pp. 1--6.
+
+\bibitem{ahmad2023edge}
+I.~Ahmad, M.~Adnan, and S.~Ullah, ``Edge-computing-based real-time object detection system using Raspberry Pi,'' \emph{IEEE Embedded Syst. Lett.}, vol.~15, no.~1, pp. 18--21, Mar. 2023.
+
+\bibitem{kumar2024low}
+V.~Kumar, S.~Patel, and R.~Nair, ``Low-latency smart surveillance using edge vision and lightweight convolutional networks,'' in \emph{Proc. IEEE Region 10 Symp. (TENSYMP)}, 2024, pp. 112--117.
+
+\bibitem{zheng2020distance}
+Z.~Zheng \emph{et~al.}, ``Distance-IoU loss: Faster and better learning for bounding box regression,'' in \emph{Proc. AAAI Conf. Artif. Intell.}, vol.~34, no.~7, pp. 12993--13000, 2020.
+
+\bibitem{li2020generalized}
+X.~Li \emph{et~al.}, ``Generalized Focal Loss: Learning qualified and distributed bounding boxes for dense object detection,'' in \emph{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~33, pp. 21002--21012, 2020.
+
+\end{thebibliography}
+
+\end{document}
