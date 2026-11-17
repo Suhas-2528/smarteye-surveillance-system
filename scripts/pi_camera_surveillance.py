@@ -23,10 +23,10 @@ from ultralytics import YOLO
 # ================= Configuration Defaults =================
 DEFAULT_SERVER_URL = "http://192.168.1.6:3001"  # Your Mac/Server IP
 DEFAULT_ROOM = "Pi Surveillance Cam - Room 101"
-DEFAULT_CONF_THRESHOLD = 0.50  # 50% threshold rejects ID cards while capturing real phones
+DEFAULT_CONF_THRESHOLD = 0.35  # 35% threshold captures distant phones; white-pixel check rejects ID cards
 ALERT_COOLDOWN_SECONDS = 3.5
 FRAME_SKIP = 3  # Process 1 out of every 3 frames to save Pi 3B+ CPU
-INFERENCE_SIZE = 320  # 320x320 keeps memory under ~350MB on Pi 3B+
+INFERENCE_SIZE = 416  # 416x416 expands detection range while keeping memory low on Pi 3B+
 # ==========================================================
 
 def send_alert_async(server_url, image_bytes, room, detection_label, confidence):
@@ -150,8 +150,8 @@ def main():
                 if box_area > (frame_area * 0.35):
                     continue
 
-                # Reject tiny pixel noise
-                if long_edge < 45:
+                # Reject sensor noise (lowered to 18px to capture distant phones)
+                if long_edge < 18:
                     continue
 
                 # Anti-ID Card & White Badge Surface Analysis
@@ -171,8 +171,8 @@ def main():
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
                     continue
 
-                # Reject squarish non-phone objects with low-to-moderate confidence
-                if aspect_ratio < 1.45 and conf < 0.65:
+                # Only reject purely square non-phone objects with low confidence
+                if aspect_ratio < 1.10 and conf < 0.38:
                     continue
 
                 if cls_name in phone_classes or 'phone' in cls_name or cls_id == 67:

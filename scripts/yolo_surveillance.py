@@ -24,7 +24,8 @@ from ultralytics import YOLO
 # Configuration
 DEFAULT_SERVER_URL = "http://localhost:3001"
 DEFAULT_ROOM = "Room 101 - Exam Hall"
-DEFAULT_CONF_THRESHOLD = 0.50  # 50% confidence threshold rejects ID badges while capturing phones
+DEFAULT_CONF_THRESHOLD = 0.35  # 35% threshold captures distant phones; white-pixel check rejects ID cards
+DEFAULT_IMGSZ = 960            # 960px inference preserves distant phone details for high detection range
 ALERT_COOLDOWN_SECONDS = 3.5   # Minimum seconds between alert dispatches
 
 def find_best_model():
@@ -81,8 +82,14 @@ def main():
     parser.add_argument("--room", default=DEFAULT_ROOM, help="Camera Location / Room Name")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF_THRESHOLD, help="Confidence threshold (0.0 - 1.0)")
     parser.add_argument("--cooldown", type=float, default=ALERT_COOLDOWN_SECONDS, help="Cooldown in seconds between alert dispatches")
+    parser.add_argument("--imgsz", type=int, default=DEFAULT_IMGSZ, help="Inference image resolution (default 960 for long range, 1280 for extreme range)")
+    parser.add_argument("--long-range", action="store_true", help="Enable extreme long-range mode (sets imgsz=1280 and conf=0.30)")
     parser.add_argument("--headless", action="store_true", help="Run without GUI window (for servers/background)")
     args = parser.parse_args()
+
+    if args.long_range:
+        args.imgsz = 1280
+        args.conf = min(args.conf, 0.30)
 
     model_path = args.model or find_best_model()
     print(f"📦 Loading YOLO Model: {model_path}")
@@ -96,12 +103,18 @@ def main():
         cap = cv2.VideoCapture(source_val, cv2.CAP_AVFOUNDATION)
         if not cap.isOpened():
             cap = cv2.VideoCapture(source_val)
+        
+        # Maximize camera capture resolution to 1080p Full HD for maximum distance clarity
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     elif os.path.isfile(args.source) and args.source.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.webp')):
         is_image = True
         cap = None
     else:
         source_val = args.source
         cap = cv2.VideoCapture(source_val)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     if not is_image and (cap is None or not cap.isOpened()):
         print(f"❌ Error: Could not open camera/source '{args.source}'")
@@ -112,7 +125,7 @@ def main():
     print(f"🌐 Backend Server : {args.server}")
     print(f"📍 Room / Node    : {args.room}")
     print(f"🎯 Model Target   : {model_path}")
-    print(f"🔍 Confidence Min : {args.conf * 100:.0f}% (Rejects ID Cards)")
+    print(f"🔭 Detection Range: HIGH-RANGE ACTIVE (imgsz={args.imgsz}px, conf={args.conf * 100:.0f}%)")
     print(f"⏱️  Alert Cooldown : {args.cooldown}s")
     print("🛡️  Anti-ID Filter : Enabled (White-pixel & Aspect ratio checks)")
     print("⌨️  Controls       : Press 'q' or ESC in video window to exit")
@@ -141,8 +154,8 @@ def main():
             frame_h, frame_w = frame.shape[:2]
             frame_area = frame_h * frame_w
 
-            # Run YOLO inference
-            results = model(frame, conf=args.conf, classes=target_classes, verbose=False)
+            # Run YOLO inference with high-resolution input size for long-range capture
+            results = model(frame, imgsz=args.imgsz, conf=args.conf, classes=target_classes, verbose=False)
             result = results[0]
 
             candidate_found = False
@@ -165,8 +178,8 @@ def main():
                 if box_area > (frame_area * 0.35):
                     continue
 
-                # 2. Reject tiny pixel noise
-                if long_edge < 45:
+                # 2. Reject sensor noise (lowered from 45 to 18px to capture distant phones across room)
+                if long_edge < 18:
                     continue
 
                 # 3. Anti-ID Card & White Badge Surface Analysis
@@ -187,8 +200,8 @@ def main():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
                     continue
 
-                # 4. Aspect Ratio Check: Squarish objects with moderate confidence are badges/wallets
-                if aspect_ratio < 1.45 and conf < 0.65:
+                # 4. Aspect Ratio Check: Only reject purely square non-phone objects with low confidence
+                if aspect_ratio < 1.10 and conf < 0.38:
                     continue
 
                 # Valid phone target confirmed
