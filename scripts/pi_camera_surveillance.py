@@ -16,13 +16,14 @@ import argparse
 import threading
 from datetime import datetime
 import cv2
+import numpy as np
 import requests
 from ultralytics import YOLO
 
 # ================= Configuration Defaults =================
 DEFAULT_SERVER_URL = "http://192.168.1.6:3001"  # Your Mac/Server IP
 DEFAULT_ROOM = "Pi Surveillance Cam - Room 101"
-DEFAULT_CONF_THRESHOLD = 0.55  # 55% threshold rejects ID cards and background noise
+DEFAULT_CONF_THRESHOLD = 0.50  # 50% threshold rejects ID cards while capturing real phones
 ALERT_COOLDOWN_SECONDS = 3.5
 FRAME_SKIP = 3  # Process 1 out of every 3 frames to save Pi 3B+ CPU
 INFERENCE_SIZE = 320  # 320x320 keeps memory under ~350MB on Pi 3B+
@@ -149,12 +150,29 @@ def main():
                 if box_area > (frame_area * 0.35):
                     continue
 
-                # Reject small objects (ID cards, badges)
+                # Reject tiny pixel noise
                 if long_edge < 45:
                     continue
 
-                # Reject squarish ID cards (smartphones have ratio >= 1.7)
-                if aspect_ratio < 1.65 and conf < 0.80:
+                # Anti-ID Card & White Badge Surface Analysis
+                crop = frame[y1:y2, x1:x2]
+                white_pct = 0.0
+                if crop.size > 0:
+                    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                    # White/bright card has high Value (> 175) and low Saturation (< 75)
+                    white_mask = (hsv[:,:,2] > 175) & (hsv[:,:,1] < 75)
+                    white_pct = (np.sum(white_mask) / white_mask.size) * 100.0
+
+                # Student ID cards have 25%-60% white surface background
+                if white_pct > 20.0 and conf < 0.85:
+                    if args.gui:
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 1)
+                        cv2.putText(frame, f"ID CARD (IGNORED {conf*100:.0f}%)", (x1, max(15, y1 - 6)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
+                    continue
+
+                # Reject squarish non-phone objects with low-to-moderate confidence
+                if aspect_ratio < 1.45 and conf < 0.65:
                     continue
 
                 if cls_name in phone_classes or 'phone' in cls_name or cls_id == 67:

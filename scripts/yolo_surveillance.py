@@ -2,6 +2,12 @@
 SmartEye AI Surveillance - Real-Time YOLO Phone Detection & Database Integration
 Captures camera frames, runs YOLO inference, detects mobile phones, and automatically
 transmits alerts and HD snapshots to the SmartEye backend (MySQL database + Web & Mobile App).
+
+Features Advanced False-Positive Rejection:
+- Filters out student ID cards & badges via white-pixel surface analysis
+- Rejects human body / wall bounding boxes via spatial area constraints
+- Filters transient lighting glitches via temporal multi-frame confirmation streak
+- Separates phone (COCO 67) from person (COCO 0) to eliminate beard/face false triggers
 """
 
 import os
@@ -11,24 +17,25 @@ import argparse
 import threading
 from datetime import datetime
 import cv2
+import numpy as np
 import requests
 from ultralytics import YOLO
 
 # Configuration
 DEFAULT_SERVER_URL = "http://localhost:3001"
 DEFAULT_ROOM = "Room 101 - Exam Hall"
-DEFAULT_CONF_THRESHOLD = 0.30
-ALERT_COOLDOWN_SECONDS = 3.0  # Minimum seconds between alert dispatches
+DEFAULT_CONF_THRESHOLD = 0.50  # 50% confidence threshold rejects ID badges while capturing phones
+ALERT_COOLDOWN_SECONDS = 3.5   # Minimum seconds between alert dispatches
 
 def find_best_model():
-    """Finds the most suitable YOLO model weights available."""
+    """Finds the most suitable YOLO model weights available, prioritizing COCO yolo11n for multi-class separation."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.join(script_dir, "runs/detect/train/weights/best.pt"),
-        os.path.join(script_dir, "best.pt"),
+        "yolo11n.pt",
         os.path.join(script_dir, "yolo11n.pt"),
-        "runs/detect/train/weights/best.pt",
-        "yolo11n.pt"
+        os.path.join(script_dir, "../yolo11n.pt"),
+        "best.pt",
+        os.path.join(script_dir, "best.pt")
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -87,6 +94,8 @@ def main():
         source_val = int(args.source)
         # On macOS, AVFOUNDATION is typically the fastest camera backend
         cap = cv2.VideoCapture(source_val, cv2.CAP_AVFOUNDATION)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(source_val)
     elif os.path.isfile(args.source) and args.source.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.webp')):
         is_image = True
         cap = None
@@ -103,13 +112,18 @@ def main():
     print(f"🌐 Backend Server : {args.server}")
     print(f"📍 Room / Node    : {args.room}")
     print(f"🎯 Model Target   : {model_path}")
-    print(f"🔍 Confidence Min : {args.conf * 100:.0f}%")
+    print(f"🔍 Confidence Min : {args.conf * 100:.0f}% (Rejects ID Cards)")
     print(f"⏱️  Alert Cooldown : {args.cooldown}s")
+    print("🛡️  Anti-ID Filter : Enabled (White-pixel & Aspect ratio checks)")
     print("⌨️  Controls       : Press 'q' or ESC in video window to exit")
     print("=" * 60)
 
     last_alert_time = 0.0
+    phone_streak = 0
     phone_classes = {'phone', 'phones', 'cell phone', 'mobile phone', 'smartphone'}
+
+    # If using 80-class COCO model, restrict target classes to cell phone (67)
+    target_classes = [67] if (hasattr(model, 'names') and 67 in model.names) else None
 
     try:
         while True:
@@ -121,14 +135,17 @@ def main():
             else:
                 ret, frame = cap.read()
                 if not ret:
-                    print("Camera stream ended or failed to read frame.")
-                    break
+                    time.sleep(0.03)
+                    continue
+
+            frame_h, frame_w = frame.shape[:2]
+            frame_area = frame_h * frame_w
 
             # Run YOLO inference
-            results = model(frame, conf=args.conf, verbose=False)
+            results = model(frame, conf=args.conf, classes=target_classes, verbose=False)
             result = results[0]
 
-            phone_detected = False
+            candidate_found = False
             max_phone_conf = 0.0
 
             # Scan detected boxes
@@ -136,24 +153,68 @@ def main():
                 cls_id = int(box.cls[0])
                 cls_name = model.names.get(cls_id, "").lower()
                 conf = float(box.conf[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                box_w = max(1, x2 - x1)
+                box_h = max(1, y2 - y1)
+                box_area = box_w * box_h
+                long_edge = max(box_w, box_h)
+                short_edge = min(box_w, box_h)
+                aspect_ratio = long_edge / short_edge
 
-                if cls_name in phone_classes or 'phone' in cls_name:
-                    phone_detected = True
+                # 1. Reject boxes covering more than 35% of the frame (people, walls, desks)
+                if box_area > (frame_area * 0.35):
+                    continue
+
+                # 2. Reject tiny pixel noise
+                if long_edge < 45:
+                    continue
+
+                # 3. Anti-ID Card & White Badge Surface Analysis
+                crop = frame[y1:y2, x1:x2]
+                white_pct = 0.0
+                if crop.size > 0:
+                    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                    # White/bright paper has high Value (brightness > 175) and low Saturation (< 75)
+                    white_mask = (hsv[:,:,2] > 175) & (hsv[:,:,1] < 75)
+                    white_pct = (np.sum(white_mask) / white_mask.size) * 100.0
+
+                # Student ID cards typically have 25%-60% white background.
+                # Real smartphones are dark glass/metal (< 12% white) or screens with icons.
+                if white_pct > 20.0 and conf < 0.85:
+                    # Draw a subtle yellow indicator in GUI showing ID card was explicitly recognized & ignored
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 1)
+                    cv2.putText(frame, f"ID CARD (IGNORED {conf*100:.0f}%)", (x1, max(15, y1 - 6)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
+                    continue
+
+                # 4. Aspect Ratio Check: Squarish objects with moderate confidence are badges/wallets
+                if aspect_ratio < 1.45 and conf < 0.65:
+                    continue
+
+                # Valid phone target confirmed
+                if cls_name in phone_classes or 'phone' in cls_name or cls_id == 67:
+                    candidate_found = True
                     if conf > max_phone_conf:
                         max_phone_conf = conf
 
                     # Draw red bounding box for phone
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                    
-                    label = f"PHONE DETECTED {conf*100:.1f}%"
+                    label = f"PHONE DETECTED {conf*100:.0f}%"
                     cv2.putText(frame, label, (x1, max(20, y1 - 10)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
+            # 5. Temporal Multi-Frame Confirmation Streak:
+            # Requires 2 consecutive frames with candidate phone to prevent momentary glitches
+            if candidate_found:
+                phone_streak += 1
+            else:
+                phone_streak = max(0, phone_streak - 1)
+
+            phone_confirmed = (phone_streak >= 2)
             current_time = time.time()
 
-            # If phone detected and cooldown has elapsed, dispatch alert!
-            if phone_detected:
+            # If phone confirmed across multiple frames and cooldown has elapsed, dispatch alert!
+            if phone_confirmed:
                 # Add alert banner at top of frame
                 cv2.rectangle(frame, (0, 0), (frame.shape[1], 40), (0, 0, 200), -1)
                 cv2.putText(frame, f"UNAUTHORIZED PHONE DETECTED ({max_phone_conf*100:.0f}%) - {args.room}", 
