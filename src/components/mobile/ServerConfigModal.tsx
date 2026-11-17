@@ -140,7 +140,7 @@ export default function ServerConfigModal({ isOpen, onClose, isDarkMode = true }
                     setServerUrl(e.target.value);
                     setStatus('idle');
                   }}
-                  placeholder="http://192.168.1.6:3000"
+                  placeholder="http://192.168.1.6:3001"
                   className={`w-full px-4 py-3 rounded-xl font-mono text-sm border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     isDarkMode ? 'bg-white/5 border-white/15 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                   }`}

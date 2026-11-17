@@ -15,7 +15,7 @@ import requests
 from ultralytics import YOLO
 
 # Configuration
-DEFAULT_SERVER_URL = "http://localhost:3000"
+DEFAULT_SERVER_URL = "http://localhost:3001"
 DEFAULT_ROOM = "Room 101 - Exam Hall"
 DEFAULT_CONF_THRESHOLD = 0.30
 ALERT_COOLDOWN_SECONDS = 3.0  # Minimum seconds between alert dispatches

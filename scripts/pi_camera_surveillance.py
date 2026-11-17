@@ -20,7 +20,7 @@ import requests
 from ultralytics import YOLO
 
 # ================= Configuration Defaults =================
-DEFAULT_SERVER_URL = "http://192.168.1.6:3000"  # Your Mac/Server IP
+DEFAULT_SERVER_URL = "http://192.168.1.6:3001"  # Your Mac/Server IP
 DEFAULT_ROOM = "Pi Surveillance Cam - Room 101"
 DEFAULT_CONF_THRESHOLD = 0.55  # 55% threshold rejects ID cards and background noise
 ALERT_COOLDOWN_SECONDS = 3.5

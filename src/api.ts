@@ -4,11 +4,11 @@
  */
 
 export const KNOWN_SERVER_HOSTS = [
-  'http://10.240.190.226:3000',
-  'http://192.168.1.6:3000'
+  'http://192.168.1.6:3001',
+  'http://localhost:3001'
 ];
 
-export const DEFAULT_SERVER_URL = (import.meta as any).env?.VITE_API_URL || 'http://10.240.190.226:3000';
+export const DEFAULT_SERVER_URL = (import.meta as any).env?.VITE_API_URL || 'http://192.168.1.6:3001';
 
 // Check if running inside Capacitor native Android/iOS app container
 export const isNativeApp = (): boolean => {
@@ -126,8 +126,9 @@ export const getImageUrl = (url?: string, tryAlternate = false): string => {
       if (
         url.includes('://localhost') ||
         url.includes('://127.0.0.1') ||
+        url.includes('://192.168.1.6:3001') ||
         url.includes('://192.168.1.6:3000') ||
-        url.includes('://10.240.190.226:3000')
+        url.includes('://10.240.190.226')
       ) {
         return url.replace(/https?:\/\/[^/]+/, activeBase);
       }
