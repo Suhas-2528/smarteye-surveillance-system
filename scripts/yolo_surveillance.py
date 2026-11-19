@@ -22,7 +22,7 @@ import requests
 from ultralytics import YOLO
 
 # Configuration
-DEFAULT_SERVER_URL = "http://localhost:3001"
+DEFAULT_SERVER_URL = "http://localhost:3000"
 DEFAULT_ROOM = "Room 101 - Exam Hall"
 DEFAULT_CONF_THRESHOLD = 0.35  # 35% threshold captures distant phones; white-pixel check rejects ID cards
 DEFAULT_IMGSZ = 960            # 960px inference preserves distant phone details for high detection range
@@ -46,29 +46,35 @@ def find_best_model():
 def send_alert_async(server_url, image_bytes, room, detection_label, confidence):
     """Transmits alert and image snapshot to SmartEye API without freezing the camera feed."""
     def worker():
-        try:
-            endpoint = f"{server_url.rstrip('/')}/api/alerts"
-            time_str = datetime.now().strftime("%I:%M %p")
-            
-            files = {
-                'image': ('phone_detection.jpg', image_bytes, 'image/jpeg')
-            }
-            data = {
-                'room': room,
-                'detection': detection_label,
-                'confidence': f"{confidence:.2f}",
-                'timestamp': time_str
-            }
-            
-            response = requests.post(endpoint, files=files, data=data, timeout=5)
-            if response.status_code in (200, 201):
-                res_data = response.json()
-                alert_id = res_data.get('alert', {}).get('id', 'saved')
-                print(f"🚨 [DB STORED] Alert ID #{alert_id} | {detection_label} ({confidence*100:.1f}%) in {room} -> Synced with App & Web")
-            else:
-                print(f"⚠️ [SERVER RESPONSE] {response.status_code}: {response.text[:80]}")
-        except Exception as err:
-            print(f"⚠️ [DISPATCH ERROR] Could not reach {server_url}: {err}")
+        urls_to_try = [server_url]
+        if ":3000" in server_url:
+            urls_to_try.append(server_url.replace(":3000", ":3001"))
+        elif ":3001" in server_url:
+            urls_to_try.append(server_url.replace(":3001", ":3000"))
+
+        time_str = datetime.now().strftime("%I:%M %p")
+        files = {'image': ('phone_detection.jpg', image_bytes, 'image/jpeg')}
+        data = {
+            'room': room,
+            'detection': detection_label,
+            'confidence': f"{confidence:.2f}",
+            'timestamp': time_str
+        }
+
+        for target_url in urls_to_try:
+            try:
+                endpoint = f"{target_url.rstrip('/')}/api/alerts"
+                response = requests.post(endpoint, files=files, data=data, timeout=5)
+                if response.status_code in (200, 201):
+                    res_data = response.json()
+                    alert_id = res_data.get('alert', {}).get('id', 'saved')
+                    print(f"🚨 [DB STORED] Alert ID #{alert_id} | {detection_label} ({confidence*100:.1f}%) in {room} -> Synced with App & Web ({target_url})")
+                    return
+                else:
+                    print(f"⚠️ [SERVER RESPONSE] {response.status_code}: {response.text[:80]}")
+            except Exception as err:
+                continue
+        print(f"⚠️ [DISPATCH ERROR] Could not reach SmartEye server on {urls_to_try}")
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()

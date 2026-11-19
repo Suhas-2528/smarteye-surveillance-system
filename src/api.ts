@@ -4,11 +4,13 @@
  */
 
 export const KNOWN_SERVER_HOSTS = [
+  'http://192.168.1.6:3000',
   'http://192.168.1.6:3001',
+  'http://localhost:3000',
   'http://localhost:3001'
 ];
 
-export const DEFAULT_SERVER_URL = (import.meta as any).env?.VITE_API_URL || 'http://192.168.1.6:3001';
+export const DEFAULT_SERVER_URL = (import.meta as any).env?.VITE_API_URL || 'http://192.168.1.6:3000';
 
 // Check if running inside Capacitor native Android/iOS app container
 export const isNativeApp = (): boolean => {

@@ -65,7 +65,7 @@ const fallbackLogs: any[] = [
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3001;
+  const PORT = Number(process.env.PORT) || 3000;
 
   await initDB();
 
@@ -746,9 +746,22 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  const PRIMARY_PORT = PORT;
+  const SECONDARY_PORT = 3001;
+
+  app.listen(PRIMARY_PORT, "0.0.0.0", () => {
+    console.log(`🚀 SmartEye Server running on http://localhost:${PRIMARY_PORT} (Mobile & Web)`);
+  }).on('error', (err: any) => {
+    console.warn(`Primary port ${PRIMARY_PORT} issue: ${err.message}`);
   });
+
+  if (PRIMARY_PORT !== SECONDARY_PORT) {
+    app.listen(SECONDARY_PORT, "0.0.0.0", () => {
+      console.log(`🔄 SmartEye Mirror running on http://localhost:${SECONDARY_PORT}`);
+    }).on('error', () => {
+      // Secondary port already in use or optional
+    });
+  }
 }
 
 startServer();
